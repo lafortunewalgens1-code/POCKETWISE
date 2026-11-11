@@ -1,4 +1,7 @@
 const STORAGE_KEY = "pocketwise-app-v1";
+const MIGRATION_BACKUP_KEY = "pocketwise-local-migration-backup-v1";
+const UNREADABLE_BACKUP_KEY = "pocketwise-local-unreadable-backup-v1";
+const MIGRATED_USERS_KEY = "pocketwise-migrated-users-v1";
 
 const defaultCategories = [
   "Food",
@@ -119,8 +122,29 @@ function sanitizeArray(value, fallback) {
 }
 
 export function normalizeState(raw) {
-  const base = createDemoState();
+  const base = createEmptyState();
   const safe = raw && typeof raw === "object" ? raw : {};
+  const savingsGoals = Array.isArray(safe.savingsGoals) ? safe.savingsGoals.map((entry) => ({
+    id: typeof entry.id === "string" ? entry.id : crypto.randomUUID(),
+    name: typeof entry.name === "string" ? entry.name : "Savings goal",
+    targetAmount: Number(entry.targetAmount) >= 0 ? Number(entry.targetAmount) : 0,
+    savedAmount: Number(entry.savedAmount) >= 0 ? Number(entry.savedAmount) : 0,
+    currency: isValidCurrency(entry.currency) ? entry.currency : "USD",
+    targetDate: typeof entry.targetDate === "string" ? entry.targetDate : "",
+  })) : base.savingsGoals;
+  const savingsContributions = Array.isArray(safe.savingsContributions)
+    ? safe.savingsContributions.map((entry) => ({
+        id: typeof entry.id === "string" ? entry.id : crypto.randomUUID(),
+        goalId: typeof entry.goalId === "string" ? entry.goalId : "",
+        amount: Number(entry.amount) >= 0 ? Number(entry.amount) : 0,
+        date: typeof entry.date === "string" ? entry.date : new Date().toISOString().slice(0, 10),
+      })).filter((entry) => entry.goalId && entry.amount > 0)
+    : savingsGoals.filter((goal) => goal.savedAmount > 0).map((goal) => ({
+        id: crypto.randomUUID(),
+        goalId: goal.id,
+        amount: goal.savedAmount,
+        date: new Date().toISOString().slice(0, 10),
+      }));
 
   return {
     language: safe.language && ["en", "fr", "ht"].includes(safe.language) ? safe.language : base.language,
@@ -146,14 +170,8 @@ export function normalizeState(raw) {
       currency: isValidCurrency(entry.currency) ? entry.currency : "USD",
       month: typeof entry.month === "string" ? entry.month : new Date().toISOString().slice(0, 7),
     })) : base.budgets,
-    savingsGoals: Array.isArray(safe.savingsGoals) ? safe.savingsGoals.map((entry) => ({
-      id: typeof entry.id === "string" ? entry.id : crypto.randomUUID(),
-      name: typeof entry.name === "string" ? entry.name : "Savings goal",
-      targetAmount: Number(entry.targetAmount) >= 0 ? Number(entry.targetAmount) : 0,
-      savedAmount: Number(entry.savedAmount) >= 0 ? Number(entry.savedAmount) : 0,
-      currency: isValidCurrency(entry.currency) ? entry.currency : "USD",
-      targetDate: typeof entry.targetDate === "string" ? entry.targetDate : "",
-    })) : base.savingsGoals,
+    savingsGoals,
+    savingsContributions,
     incomes: Array.isArray(safe.incomes) ? safe.incomes.map((entry) => ({
       id: typeof entry.id === "string" ? entry.id : crypto.randomUUID(),
       amount: Number(entry.amount) >= 0 ? Number(entry.amount) : 0,
@@ -183,9 +201,15 @@ export function loadAppState() {
     }
     return normalizeState(JSON.parse(raw));
   } catch (err) {
-    const fallback = normalizeState(createEmptyState());
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(fallback));
-    return fallback;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw && !localStorage.getItem(UNREADABLE_BACKUP_KEY)) {
+        localStorage.setItem(UNREADABLE_BACKUP_KEY, raw);
+      }
+    } catch (backupError) {
+      console.error("Could not preserve unreadable local data.", backupError);
+    }
+    return normalizeState(createEmptyState());
   }
 }
 
@@ -197,6 +221,41 @@ export function loadDemoData() {
 
 export function saveAppState(state) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeState(state)));
+}
+
+export function preserveLocalMigrationBackup(state) {
+  const hasFinancialData = state.incomes.length || state.expenses.length || state.budgets.length || state.savingsGoals.length;
+  if (!hasFinancialData || state.isDemo || localStorage.getItem(MIGRATION_BACKUP_KEY)) return;
+  localStorage.setItem(MIGRATION_BACKUP_KEY, JSON.stringify(normalizeState(state)));
+}
+
+export function loadLocalMigrationBackup() {
+  try {
+    const raw = localStorage.getItem(MIGRATION_BACKUP_KEY);
+    return raw ? normalizeState(JSON.parse(raw)) : null;
+  } catch (error) {
+    throw new Error("The preserved local migration backup could not be read.");
+  }
+}
+
+export function hasMigratedLocalData(userId) {
+  try {
+    const migratedUsers = JSON.parse(localStorage.getItem(MIGRATED_USERS_KEY) || "{}");
+    return Boolean(migratedUsers[userId]);
+  } catch (error) {
+    return false;
+  }
+}
+
+export function markLocalDataMigrated(userId) {
+  let migratedUsers = {};
+  try {
+    migratedUsers = JSON.parse(localStorage.getItem(MIGRATED_USERS_KEY) || "{}");
+  } catch (error) {
+    migratedUsers = {};
+  }
+  migratedUsers[userId] = new Date().toISOString();
+  localStorage.setItem(MIGRATED_USERS_KEY, JSON.stringify(migratedUsers));
 }
 
 export function exportData(state) {
