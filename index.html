@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LAFORTUNE POCKET | Your Money. Your Plan. Your Future.</title>
+    <meta
+      name="description"
+      content="LAFORTUNE POCKET is a premium personal finance manager for budgets, income, expenses, savings goals, and reporting."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand-wrap">
+          <div class="brand-mark" aria-label="LAFORTUNE POCKET logo">LP</div>
+          <div>
+            <h1>LAFORTUNE POCKET</h1>
+            <p data-i18n="tagline">Your Money. Your Plan. Your Future.</p>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav" aria-label="Main navigation">
+          <button class="nav-item active" data-target="dashboard-section">
+            <span>📊</span> <span data-i18n="navDashboard">Dashboard</span>
+          </button>
+          <button class="nav-item" data-target="income-section">
+            <span>💰</span> <span data-i18n="navIncome">Income</span>
+          </button>
+          <button class="nav-item" data-target="expenses-section">
+            <span>🧾</span> <span data-i18n="navExpenses">Expenses</span>
+          </button>
+          <button class="nav-item" data-target="budgets-section">
+            <span>📦</span> <span data-i18n="navBudgets">Budgets</span>
+          </button>
+          <button class="nav-item" data-target="safety-section">
+            <span>🛡️</span> <span data-i18n="navSafeToSpend">Safe to Spend</span>
+          </button>
+          <button class="nav-item" data-target="savings-section">
+            <span>🏦</span> <span data-i18n="navSavings">Savings</span>
+          </button>
+          <button class="nav-item" data-target="reports-section">
+            <span>📈</span> <span data-i18n="navReports">Reports</span>
+          </button>
+          <button class="nav-item" data-target="history-section">
+            <span>🕘</span> <span data-i18n="navHistory">History</span>
+          </button>
+          <button class="nav-item" data-target="settings-section">
+            <span>⚙️</span> <span data-i18n="navSettings">Settings</span>
+          </button>
+        </nav>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" data-i18n="overview">Overview</p>
+            <h2 id="pageTitle">Dashboard</h2>
+          </div>
+          <div class="topbar-actions">
+            <button class="action-btn primary" data-open-form="income-form-panel" data-i18n="btnAddIncome">Add Income</button>
+            <button class="action-btn secondary" data-open-form="expense-form-panel" data-i18n="btnAddExpense">Add Expense</button>
+          </div>
+        </header>
+
+        <section id="dashboard-section" class="view active">
+          <div id="demoDataNotice" class="demo-notice" hidden></div>
+          <div class="stats-grid" id="dashboardStats"></div>
+          <div class="dashboard-grid">
+            <div class="panel">
+              <div class="panel-header">
+                <h3 data-i18n="recentTransactions">Recent Transactions</h3>
+              </div>
+              <div id="recentTransactions" class="list-stack"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h3 data-i18n="monthlyOverview">Monthly Overview</h3>
+              </div>
+              <div id="monthlyOverview" class="bars-stack"></div>
+            </div>
+          </div>
+          <div class="dashboard-grid lower-grid">
+            <div class="panel">
+              <div class="panel-header">
+                <h3 data-i18n="spendingBreakdown">Spending Breakdown</h3>
+              </div>
+              <div id="categoryBreakdown" class="breakdown-stack"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-header">
+                <h3 data-i18n="quickActions">Quick Actions</h3>
+              </div>
+              <div class="quick-actions-grid">
+                <button class="quick-action" data-target="income-section" data-i18n="btnAddIncome">Add Income</button>
+                <button class="quick-action" data-target="expenses-section" data-i18n="btnAddExpense">Add Expense</button>
+                <button class="quick-action" data-target="budgets-section" data-i18n="btnCreateBudget">Create Budget</button>
+                <button class="quick-action" data-target="savings-section" data-i18n="btnAddSavingsGoal">Add Savings Goal</button>
+                <button class="quick-action" data-target="reports-section" data-i18n="btnViewReports">View Reports</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="income-section" class="view">
+          <div class="panel form-panel" id="income-form-panel">
+            <div class="panel-header">
+              <h3 data-i18n="incomeHeader">Income</h3>
+            </div>
+            <form id="incomeForm" class="stack-form">
+              <input type="hidden" id="incomeId" />
+              <div class="form-grid two-col">
+                <label>
+                  <span data-i18n="amount">Amount</span>
+                  <input id="incomeAmount" type="number" min="0" step="0.01" required />
+                </label>
+                <label>
+                  <span data-i18n="currency">Currency</span>
+                  <select id="incomeCurrency">
+                    <option value="USD">USD</option>
+                    <option value="HTG">HTG</option>
+                  </select>
+                </label>
+                <label>
+                  <span data-i18n="source">Source</span>
+                  <select id="incomeSource"></select>
+                </label>
+                <label>
+                  <span data-i18n="date">Date</span>
+                  <input id="incomeDate" type="date" required />
+                </label>
+              </div>
+              <label>
+                <span data-i18n="descriptionOptional">Description (optional)</span>
+                <input id="incomeDescription" type="text" maxlength="150" />
+              </label>
+              <div class="form-actions">
+                <button type="submit" class="primary" data-i18n="save">Save</button>
+                <button type="button" class="secondary" data-reset-form="incomeForm" data-i18n="cancel">Cancel</button>
+              </div>
+            </form>
+          </div>
+          <div class="panel table-panel">
+            <div class="panel-header compact-header">
+              <h3 data-i18n="incomeHistory">Income History</h3>
+              <div class="inline-filters">
+                <input id="incomeSearch" type="search" placeholder="Search" data-i18n-placeholder="searchPlaceholder" />
+                <select id="incomeFilterSource"></select>
+                <select id="incomeFilterCurrency">
+                  <option value="all" data-i18n="allCurrencies">All currencies</option>
+                  <option value="USD">USD</option>
+                  <option value="HTG">HTG</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-i18n="source">Source</th>
+                    <th data-i18n="amount">Amount</th>
+                    <th data-i18n="date">Date</th>
+                    <th data-i18n="description">Description</th>
+                    <th data-i18n="actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="incomeTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="expenses-section" class="view">
+          <div class="panel form-panel" id="expense-form-panel">
+            <div class="panel-header">
+              <h3 data-i18n="expenseHeader">Expenses</h3>
+            </div>
+            <form id="expenseForm" class="stack-form">
+              <input type="hidden" id="expenseId" />
+              <div class="form-grid two-col">
+                <label>
+                  <span data-i18n="amount">Amount</span>
+                  <input id="expenseAmount" type="number" min="0" step="0.01" required />
+                </label>
+                <label>
+                  <span data-i18n="currency">Currency</span>
+                  <select id="expenseCurrency">
+                    <option value="USD">USD</option>
+                    <option value="HTG">HTG</option>
+                  </select>
+                </label>
+                <label>
+                  <span data-i18n="category">Category</span>
+                  <select id="expenseCategory"></select>
+                </label>
+                <label>
+                  <span data-i18n="date">Date</span>
+                  <input id="expenseDate" type="date" required />
+                </label>
+              </div>
+              <label>
+                <span data-i18n="descriptionOptional">Description (optional)</span>
+                <input id="expenseDescription" type="text" maxlength="150" />
+              </label>
+              <div class="form-actions">
+                <button type="submit" class="primary" data-i18n="save">Save</button>
+                <button type="button" class="secondary" data-reset-form="expenseForm" data-i18n="cancel">Cancel</button>
+              </div>
+            </form>
+          </div>
+          <div class="panel table-panel">
+            <div class="panel-header compact-header">
+              <h3 data-i18n="transactionHistory">Transaction History</h3>
+              <div class="inline-filters">
+                <input id="expenseSearch" type="search" placeholder="Search" data-i18n-placeholder="searchPlaceholder" />
+                <select id="expenseFilterCategory"></select>
+                <select id="expenseFilterCurrency">
+                  <option value="all" data-i18n="allCurrencies">All currencies</option>
+                  <option value="USD">USD</option>
+                  <option value="HTG">HTG</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-i18n="category">Category</th>
+                    <th data-i18n="amount">Amount</th>
+                    <th data-i18n="date">Date</th>
+                    <th data-i18n="description">Description</th>
+                    <th data-i18n="actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="expenseTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="budgets-section" class="view">
+          <div class="panel form-panel">
+            <div class="panel-header">
+              <h3 data-i18n="budgetHeader">Budgets</h3>
+            </div>
+            <form id="budgetForm" class="stack-form">
+              <input type="hidden" id="budgetId" />
+              <div class="form-grid two-col">
+                <label>
+                  <span data-i18n="category">Category</span>
+                  <select id="budgetCategory"></select>
+                </label>
+                <label>
+                  <span data-i18n="amount">Allocated Amount</span>
+                  <input id="budgetAmount" type="number" min="0" step="0.01" required />
+                </label>
+                <label>
+                  <span data-i18n="currency">Currency</span>
+                  <select id="budgetCurrency">
+                    <option value="USD">USD</option>
+                    <option value="HTG">HTG</option>
+                  </select>
+                </label>
+                <label>
+                  <span data-i18n="month">Month</span>
+                  <input id="budgetMonth" type="month" required />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary" data-i18n="save">Save</button>
+                <button type="button" class="secondary" data-reset-form="budgetForm" data-i18n="cancel">Cancel</button>
+              </div>
+            </form>
+          </div>
+          <div class="panel table-panel">
+            <div class="panel-header">
+              <h3 data-i18n="budgetOverview">Budget Overview</h3>
+            </div>
+            <div id="budgetList" class="budget-list"></div>
+          </div>
+        </section>
+
+        <section id="safety-section" class="view">
+          <div class="panel form-panel">
+            <div class="panel-header">
+              <h3 data-i18n="safeToSpendTitle">Safe to Spend</h3>
+            </div>
+            <form id="safeToSpendForm" class="stack-form">
+              <div class="form-grid two-col">
+                <label>
+                  <span data-i18n="nextIncomeDate">Next expected income date</span>
+                  <input id="safeIncomeDate" type="date" />
+                </label>
+                <label>
+                  <span data-i18n="nextIncomeAmount">Expected income amount</span>
+                  <input id="safeIncomeAmount" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  <span data-i18n="currency">Currency</span>
+                  <select id="safeIncomeCurrency">
+                    <option value="USD">USD</option>
+                    <option value="HTG">HTG</option>
+                  </select>
+                </label>
+                <label>
+                  <span data-i18n="reservedSavings">Reserved savings</span>
+                  <input id="safeReservedSavings" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  <span data-i18n="upcomingExpenses">Essential upcoming expenses</span>
+                  <input id="safeUpcomingExpenses" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  <span data-i18n="preferredCurrency">Preferred currency</span>
+                  <select id="safeDisplayCurrency">
+                    <option value="USD">USD</option>
+                    <option value="HTG">HTG</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary" data-i18n="calculate">Calculate</button>
+              </div>
+            </form>
+          </div>
+          <div class="panel table-panel">
+            <div class="panel-header">
+              <h3 data-i18n="safeToSpendSummary">Safe to Spend Summary</h3>
+            </div>
+            <div id="safeToSpendResult" class="result-card"></div>
+          </div>
+        </section>
+
+        <section id="savings-section" class="view">
+          <div class="panel form-panel">
+            <div class="panel-header">
+              <h3 data-i18n="savingsHeader">Savings Goals</h3>
+            </div>
+            <form id="savingsForm" class="stack-form">
+              <input type="hidden" id="savingsGoalId" />
+              <div class="form-grid two-col">
+                <label>
+                  <span data-i18n="goalName">Goal name</span>
+                  <input id="goalName" type="text" maxlength="80" required />
+                </label>
+                <label>
+                  <span data-i18n="targetAmount">Target amount</span>
+                  <input id="goalTargetAmount" type="number" min="0" step="0.01" required />
+                </label>
+                <label>
+                  <span data-i18n="currency">Currency</span>
+                  <select id="goalCurrency">
+                    <option value="USD">USD</option>
+                    <option value="HTG">HTG</option>
+                  </select>
+                </label>
+                <label>
+                  <span data-i18n="targetDate">Target date</span>
+                  <input id="goalTargetDate" type="date" />
+                </label>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="primary" data-i18n="save">Save</button>
+                <button type="button" class="secondary" data-reset-form="savingsForm" data-i18n="cancel">Cancel</button>
+              </div>
+            </form>
+          </div>
+          <div class="panel table-panel">
+            <div class="panel-header">
+              <h3 data-i18n="goalProgress">Goal Progress</h3>
+            </div>
+            <div id="savingsList" class="savings-list"></div>
+          </div>
+        </section>
+
+        <section id="reports-section" class="view">
+          <div class="panel form-panel">
+            <div class="panel-header">
+              <h3 data-i18n="reportsHeader">Reports</h3>
+            </div>
+            <div class="form-grid two-col">
+              <label>
+                <span data-i18n="reportType">Period</span>
+                <select id="reportType">
+                  <option value="daily" data-i18n="daily">Daily</option>
+                  <option value="weekly" data-i18n="weekly">Weekly</option>
+                  <option value="monthly" data-i18n="monthly">Monthly</option>
+                  <option value="yearly" data-i18n="yearly">Yearly</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="currency">Currency</span>
+                <select id="reportCurrency">
+                  <option value="USD">USD</option>
+                  <option value="HTG">HTG</option>
+                </select>
+              </label>
+              <label>
+                <span data-i18n="startDate">Start date</span>
+                <input id="reportStartDate" type="date" />
+              </label>
+              <label>
+                <span data-i18n="endDate">End date</span>
+                <input id="reportEndDate" type="date" />
+              </label>
+            </div>
+          </div>
+          <div class="panel table-panel">
+            <div class="panel-header">
+              <h3 data-i18n="reportSummary">Summary</h3>
+            </div>
+            <div id="reportSummary" class="report-summary"></div>
+            <div id="reportChart" class="chart-panel"></div>
+          </div>
+        </section>
+
+        <section id="history-section" class="view">
+          <div class="panel table-panel">
+            <div class="panel-header compact-header">
+              <h3 data-i18n="allTransactions">All Transactions</h3>
+              <div class="inline-filters">
+                <input id="historySearch" type="search" placeholder="Search" data-i18n-placeholder="searchPlaceholder" />
+                <select id="historyType">
+                  <option value="all" data-i18n="allTypes">All types</option>
+                  <option value="income" data-i18n="income">Income</option>
+                  <option value="expense" data-i18n="expense">Expense</option>
+                </select>
+                <select id="historyCurrency">
+                  <option value="all" data-i18n="allCurrencies">All currencies</option>
+                  <option value="USD">USD</option>
+                  <option value="HTG">HTG</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th data-i18n="type">Type</th>
+                    <th data-i18n="category">Category</th>
+                    <th data-i18n="amount">Amount</th>
+                    <th data-i18n="date">Date</th>
+                    <th data-i18n="description">Description</th>
+                    <th data-i18n="actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section id="settings-section" class="view">
+          <div class="panel form-panel">
+            <div class="panel-header">
+              <h3 data-i18n="settingsHeader">Settings</h3>
+            </div>
+            <div class="settings-grid">
+              <div class="setting-card">
+                <h4 data-i18n="profileSettings">Profile</h4>
+                <label>
+                  <span data-i18n="fullName">Full name</span>
+                  <input id="profileName" type="text" />
+                </label>
+              </div>
+              <div class="setting-card">
+                <h4 data-i18n="languagePreferences">Language & Appearance</h4>
+                <label>
+                  <span data-i18n="language">Language</span>
+                  <select id="languageSelect">
+                    <option value="en">English</option>
+                    <option value="fr">Français</option>
+                    <option value="ht">Kreyòl Ayisyen</option>
+                  </select>
+                </label>
+                <label>
+                  <span data-i18n="theme">Theme</span>
+                  <select id="themeSelect">
+                    <option value="light" data-i18n="lightMode">Light mode</option>
+                    <option value="dark" data-i18n="darkMode">Dark mode</option>
+                  </select>
+                </label>
+              </div>
+              <div class="setting-card">
+                <h4 data-i18n="financialPreferences">Financial Preferences</h4>
+                <label>
+                  <span data-i18n="preferredCurrency">Preferred currency</span>
+                  <select id="preferredCurrencySelect">
+                    <option value="USD">USD</option>
+                    <option value="HTG">HTG</option>
+                  </select>
+                </label>
+                <label>
+                  <span data-i18n="exchangeRate">Manual exchange rate</span>
+                  <input id="exchangeRateInput" type="number" min="0.01" step="0.01" />
+                </label>
+              </div>
+              <div class="setting-card">
+                <h4 data-i18n="categoryManagement">Categories & Sources</h4>
+                <div class="list-row">
+                  <label>
+                    <span data-i18n="newExpenseCategory">New expense category</span>
+                    <input id="newExpenseCategoryInput" type="text" />
+                  </label>
+                  <button id="addExpenseCategoryBtn" type="button" class="secondary" data-i18n="addCategory">Add Category</button>
+                </div>
+                <div class="list-row">
+                  <label>
+                    <span data-i18n="newIncomeSource">New income source</span>
+                    <input id="newIncomeSourceInput" type="text" />
+                  </label>
+                  <button id="addIncomeSourceBtn" type="button" class="secondary" data-i18n="addSource">Add Source</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel form-panel">
+            <div class="panel-header">
+              <h3 data-i18n="dataManagement">Data Management</h3>
+            </div>
+            <div class="settings-actions">
+              <button id="loadDemoDataBtn" class="secondary" type="button" data-i18n="loadDemoData">Load demo data</button>
+              <button id="exportDataBtn" class="primary" type="button" data-i18n="exportData">Export Data</button>
+              <label class="file-input-button secondary">
+                <input id="importDataInput" type="file" accept="application/json" />
+                <span data-i18n="importData">Import Data</span>
+              </label>
+              <button id="resetDataBtn" class="danger" type="button" data-i18n="resetData">Reset Application</button>
+            </div>
+            <p class="storage-note" data-i18n="storageNote">
+              All data is stored locally in your current browser and device. It does not synchronize automatically to other devices and is not cloud backup.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
