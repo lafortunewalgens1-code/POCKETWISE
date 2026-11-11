@@ -14,7 +14,50 @@
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <section id="authGate" class="auth-gate" aria-labelledby="authHeading">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <div class="brand-mark" aria-hidden="true">LP</div>
+          <div>
+            <h1>LAFORTUNE POCKET</h1>
+            <p data-i18n="tagline">Your Money. Your Plan. Your Future.</p>
+          </div>
+        </div>
+        <label class="auth-language-label">
+          <span data-i18n="language">Language</span>
+          <select id="authLanguageSelect">
+            <option value="en">English</option>
+            <option value="fr">Français</option>
+            <option value="ht">Kreyòl Ayisyen</option>
+          </select>
+        </label>
+        <h2 id="authHeading"></h2>
+        <p id="authIntro" class="auth-intro"></p>
+        <form id="authForm" class="stack-form">
+          <label id="authEmailRow">
+            <span data-i18n="authEmail">Email address</span>
+            <input id="authEmail" type="email" autocomplete="email" required />
+          </label>
+          <label id="authPasswordRow">
+            <span data-i18n="authPassword">Password</span>
+            <input id="authPassword" type="password" autocomplete="current-password" minlength="8" required />
+          </label>
+          <label id="authPasswordConfirmRow" hidden>
+            <span data-i18n="authConfirmPassword">Confirm password</span>
+            <input id="authPasswordConfirm" type="password" autocomplete="new-password" minlength="8" />
+          </label>
+          <div id="authRecoveryNote" class="auth-recovery-note" hidden data-i18n="authRecoveryNote"></div>
+          <button id="authSubmit" type="submit" class="primary"></button>
+        </form>
+        <div class="auth-actions">
+          <button id="authModeToggle" type="button" class="text-button"></button>
+          <button id="authResetLink" type="button" class="text-button" data-i18n="authForgotPassword">Forgot password?</button>
+        </div>
+        <p id="authStatus" class="auth-status" role="status" aria-live="polite" hidden></p>
+      </div>
+    </section>
+
+    <div id="app-shell" class="app-shell" hidden>
       <aside class="sidebar">
         <div class="brand-wrap">
           <div class="brand-mark" aria-label="LAFORTUNE POCKET logo">LP</div>
@@ -53,6 +96,10 @@
             <span>⚙️</span> <span data-i18n="navSettings">Settings</span>
           </button>
         </nav>
+        <div class="account-panel">
+          <span id="signedInEmail"></span>
+          <button id="signOutBtn" type="button" class="secondary" data-i18n="authSignOut">Sign out</button>
+        </div>
       </aside>
 
       <main class="main-panel">
@@ -66,6 +113,14 @@
             <button class="action-btn secondary" data-open-form="expense-form-panel" data-i18n="btnAddExpense">Add Expense</button>
           </div>
         </header>
+        <div id="appStatus" class="app-status" role="status" aria-live="polite" hidden></div>
+        <section id="migrationPanel" class="migration-panel" hidden>
+          <div>
+            <h3 data-i18n="migrationTitle">Import your saved local data</h3>
+            <p data-i18n="migrationDescription">Local financial records were found in this browser. Import them into this account without removing the originals.</p>
+          </div>
+          <button id="migrateLocalDataBtn" type="button" class="primary" data-i18n="migrationAction">Import local data</button>
+        </section>
 
         <section id="dashboard-section" class="view active">
           <div id="demoDataNotice" class="demo-notice" hidden></div>
@@ -498,6 +553,7 @@
                   <span data-i18n="exchangeRate">Manual exchange rate</span>
                   <input id="exchangeRateInput" type="number" min="0.01" step="0.01" />
                 </label>
+                <p class="storage-note" data-i18n="cloudSettingsNote">Language, exchange rate, and next expected income date sync to your account. Other display preferences remain on this device.</p>
               </div>
               <div class="setting-card">
                 <h4 data-i18n="categoryManagement">Categories & Sources</h4>
@@ -533,7 +589,7 @@
               <button id="resetDataBtn" class="danger" type="button" data-i18n="resetData">Reset Application</button>
             </div>
             <p class="storage-note" data-i18n="storageNote">
-              All data is stored locally in your current browser and device. It does not synchronize automatically to other devices and is not cloud backup.
+              Your financial records sync to your Supabase account. Export a JSON backup for an additional copy.
             </p>
           </div>
         </section>

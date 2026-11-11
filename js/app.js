@@ -1,5 +1,32 @@
 import { translations } from "./translations.js";
-import { loadAppState, saveAppState, exportData, importData, resetData, loadDemoData } from "./storage.js";
+import {
+  loadAppState,
+  saveAppState,
+  exportData,
+  importData,
+  resetData,
+  loadDemoData,
+  preserveLocalMigrationBackup,
+  loadLocalMigrationBackup,
+  hasMigratedLocalData,
+  markLocalDataMigrated,
+} from "./storage.js";
+import { supabase, supabaseConfigurationError } from "./supabase-client.js";
+import {
+  loadUserData,
+  saveIncome,
+  deleteIncome,
+  saveExpense,
+  deleteExpense,
+  saveBudget,
+  deleteBudget,
+  saveSavingsGoal,
+  deleteSavingsGoal,
+  addSavingsContribution,
+  saveUserSettings,
+  migrateLocalData,
+  clearUserData,
+} from "./supabase-data.js";
 import {
   formatMoney,
   formatDate,
@@ -16,11 +43,37 @@ import {
 } from "./finance.js";
 
 const state = loadAppState();
+preserveLocalMigrationBackup(state);
+let activeUser = null;
+let currentAuthMode = "login";
+let authTransition = 0;
 const app = {
   currentView: "dashboard-section",
 };
 
 const els = {
+  authGate: document.getElementById("authGate"),
+  appShell: document.getElementById("app-shell"),
+  authForm: document.getElementById("authForm"),
+  authHeading: document.getElementById("authHeading"),
+  authIntro: document.getElementById("authIntro"),
+  authEmail: document.getElementById("authEmail"),
+  authEmailRow: document.getElementById("authEmailRow"),
+  authPassword: document.getElementById("authPassword"),
+  authPasswordRow: document.getElementById("authPasswordRow"),
+  authPasswordConfirm: document.getElementById("authPasswordConfirm"),
+  authPasswordConfirmRow: document.getElementById("authPasswordConfirmRow"),
+  authRecoveryNote: document.getElementById("authRecoveryNote"),
+  authSubmit: document.getElementById("authSubmit"),
+  authModeToggle: document.getElementById("authModeToggle"),
+  authResetLink: document.getElementById("authResetLink"),
+  authStatus: document.getElementById("authStatus"),
+  authLanguageSelect: document.getElementById("authLanguageSelect"),
+  signedInEmail: document.getElementById("signedInEmail"),
+  signOutBtn: document.getElementById("signOutBtn"),
+  appStatus: document.getElementById("appStatus"),
+  migrationPanel: document.getElementById("migrationPanel"),
+  migrateLocalDataBtn: document.getElementById("migrateLocalDataBtn"),
   pageTitle: document.getElementById("pageTitle"),
   navItems: [...document.querySelectorAll(".nav-item")],
   views: [...document.querySelectorAll(".view")],
@@ -72,6 +125,159 @@ const els = {
 
 function t(key) {
   return (translations[state.language] && translations[state.language][key]) || (translations.en && translations.en[key]) || key;
+}
+
+function setAuthStatus(message, isError = false) {
+  els.authStatus.textContent = message;
+  els.authStatus.classList.toggle("error", isError);
+  els.authStatus.hidden = !message;
+}
+
+function setAppStatus(message, status = "info") {
+  els.appStatus.textContent = message;
+  els.appStatus.dataset.status = status;
+  els.appStatus.hidden = !message;
+}
+
+function authErrorMessage(error) {
+  const code = error?.code || "";
+  const message = String(error?.message || "").toLowerCase();
+  if (code === "invalid_credentials" || message.includes("invalid login credentials")) return t("authErrorInvalidCredentials");
+  if (code === "email_not_confirmed" || message.includes("email not confirmed")) return t("authErrorEmailNotConfirmed");
+  if (code === "user_already_exists" || message.includes("already registered")) return t("authErrorEmailTaken");
+  if (code === "weak_password" || message.includes("weak password")) return t("authErrorWeakPassword");
+  return t("authGenericError");
+}
+
+function renderAuth() {
+  const modes = {
+    login: {
+      heading: "authHeadingLogin",
+      intro: "authIntroLogin",
+      submit: "authLogin",
+      password: true,
+      confirm: false,
+      email: true,
+      toggle: "authToggleToSignUp",
+      reset: true,
+    },
+    signup: {
+      heading: "authHeadingSignup",
+      intro: "authIntroSignup",
+      submit: "authSignUp",
+      password: true,
+      confirm: true,
+      email: true,
+      toggle: "authToggleToLogin",
+      reset: false,
+    },
+    reset: {
+      heading: "authResetTitle",
+      intro: "authResetIntro",
+      submit: "authSendReset",
+      password: false,
+      confirm: false,
+      email: true,
+      toggle: "",
+      reset: false,
+    },
+    "update-password": {
+      heading: "authResetTitle",
+      intro: "authRecoveryNote",
+      submit: "authUpdatePassword",
+      password: true,
+      confirm: true,
+      email: false,
+      toggle: "",
+      reset: false,
+    },
+  };
+  const mode = modes[currentAuthMode] || modes.login;
+  els.authHeading.textContent = t(mode.heading);
+  els.authIntro.textContent = t(mode.intro);
+  els.authSubmit.textContent = t(mode.submit);
+  els.authEmailRow.hidden = !mode.email;
+  els.authEmail.required = mode.email;
+  els.authPasswordRow.hidden = !mode.password;
+  els.authPassword.required = mode.password;
+  els.authPassword.autocomplete = currentAuthMode === "login" ? "current-password" : "new-password";
+  els.authPasswordConfirmRow.hidden = !mode.confirm;
+  els.authPasswordConfirm.required = mode.confirm;
+  els.authRecoveryNote.hidden = currentAuthMode !== "update-password";
+  els.authModeToggle.hidden = !mode.toggle;
+  els.authModeToggle.textContent = mode.toggle ? t(mode.toggle) : "";
+  els.authResetLink.hidden = !mode.reset;
+  els.authLanguageSelect.value = state.language;
+}
+
+function localStateHasRecords(localState) {
+  return Boolean(localState && !localState.isDemo &&
+    (localState.incomes.length || localState.expenses.length || localState.budgets.length || localState.savingsGoals.length));
+}
+
+async function loadAuthenticatedData(user, transition) {
+  setAuthStatus("");
+  let migrationBackup = null;
+  let migrationBackupError = false;
+  try {
+    migrationBackup = loadLocalMigrationBackup();
+  } catch (error) {
+    migrationBackupError = true;
+    console.error("Could not read the preserved local migration backup.", error);
+  }
+  const remote = await loadUserData();
+  if (transition !== authTransition) return;
+
+  state.incomes = remote.incomes;
+  state.expenses = remote.expenses;
+  state.budgets = remote.budgets;
+  state.savingsGoals = remote.savingsGoals;
+  state.savingsContributions = remote.savingsContributions;
+  state.isDemo = false;
+  if (remote.settings?.preferred_language && ["en", "fr", "ht"].includes(remote.settings.preferred_language)) {
+    state.language = remote.settings.preferred_language;
+  }
+  if (Number(remote.settings?.exchange_rate) > 0) state.exchangeRate = Number(remote.settings.exchange_rate);
+  if (remote.settings?.next_expected_income_date) {
+    state.safeToSpend.nextIncomeDate = remote.settings.next_expected_income_date;
+  }
+  if (!remote.settings) await saveUserSettings(state);
+
+  saveState();
+  els.signedInEmail.textContent = user.email || "";
+  els.authGate.hidden = true;
+  els.appShell.hidden = false;
+  els.migrationPanel.hidden = !localStateHasRecords(migrationBackup) || hasMigratedLocalData(user.id);
+  renderAll();
+  setAppStatus(migrationBackupError ? t("migrationBackupError") : t("cloudReady"), migrationBackupError ? "error" : "success");
+}
+
+async function applyAuthSession(session) {
+  const transition = ++authTransition;
+  if (!session?.user) {
+    activeUser = null;
+    els.appShell.hidden = true;
+    els.authGate.hidden = false;
+    els.migrationPanel.hidden = true;
+    els.authEmail.value = "";
+    els.authPassword.value = "";
+    els.authPasswordConfirm.value = "";
+    renderAuth();
+    return;
+  }
+
+  activeUser = session.user;
+  setAuthStatus(t("cloudLoading"));
+  try {
+    await loadAuthenticatedData(session.user, transition);
+  } catch (error) {
+    console.error("Could not load authenticated user data.", error);
+    if (transition === authTransition) {
+      els.appShell.hidden = true;
+      els.authGate.hidden = false;
+      setAuthStatus(t("cloudLoadError"), true);
+    }
+  }
 }
 
 function setPageTitle(text) {
@@ -196,6 +402,8 @@ function renderDashboard() {
     const hasFinancialData = state.incomes.length || state.expenses.length || state.budgets.length || state.savingsGoals.length;
     els.demoDataNotice.textContent = state.isDemo
       ? t("demoDataNotice")
+      : activeUser
+        ? t("accountDataNotice")
       : hasFinancialData
         ? t("localDataNotice")
         : t("emptyStateNotice");
@@ -501,7 +709,63 @@ function renderAll() {
   renderSettings();
 }
 
-function handleIncomeSubmit(event) {
+async function persistDataChange(operation, applyChange) {
+  setAppStatus(t("cloudSaving"), "loading");
+  try {
+    await operation();
+    applyChange();
+    saveState();
+    renderAll();
+    setAppStatus(t("cloudSaved"), "success");
+  } catch (error) {
+    console.error("Could not save account data.", error);
+    try {
+      const remote = await loadUserData();
+      state.incomes = remote.incomes;
+      state.expenses = remote.expenses;
+      state.budgets = remote.budgets;
+      state.savingsGoals = remote.savingsGoals;
+      state.savingsContributions = remote.savingsContributions;
+      saveState();
+      renderAll();
+    } catch (refreshError) {
+      console.error("Could not refresh account data after a failed save.", refreshError);
+    }
+    setAppStatus(t("cloudSaveError"), "error");
+  }
+}
+
+async function persistUserSettings(applyChange) {
+  const previousState = JSON.parse(JSON.stringify(state));
+  setAppStatus(t("cloudSaving"), "loading");
+  try {
+    applyChange();
+    await saveUserSettings(state);
+    saveState();
+    renderAll();
+    setAppStatus(t("cloudSaved"), "success");
+  } catch (error) {
+    console.error("Could not save account settings.", error);
+    Object.assign(state, previousState);
+    try {
+      const remote = await loadUserData();
+      if (remote.settings) {
+        if (["en", "fr", "ht"].includes(remote.settings.preferred_language)) {
+          state.language = remote.settings.preferred_language;
+        }
+        if (Number(remote.settings.exchange_rate) > 0) state.exchangeRate = Number(remote.settings.exchange_rate);
+        state.safeToSpend.nextIncomeDate = remote.settings.next_expected_income_date || "";
+      }
+    } catch (refreshError) {
+      console.error("Could not refresh account settings after a failed save.", refreshError);
+    }
+    saveState();
+    renderAll();
+    setAppStatus(t("cloudSaveError"), "error");
+  }
+}
+
+async function handleIncomeSubmit(event) {
   event.preventDefault();
   const id = document.getElementById("incomeId").value;
   const amount = Number(document.getElementById("incomeAmount").value);
@@ -515,22 +779,17 @@ function handleIncomeSubmit(event) {
     return;
   }
 
-  if (id) {
-    const index = state.incomes.findIndex((item) => item.id === id);
-    if (index >= 0) {
-      state.incomes[index] = { ...state.incomes[index], amount, currency, source, date, description };
-    }
-  } else {
-    state.incomes.push({ id: crypto.randomUUID(), amount, currency, source, date, description });
-  }
-
-  els.incomeForm.reset();
-  document.getElementById("incomeId").value = "";
-  saveState();
-  renderAll();
+  const record = { id: id || crypto.randomUUID(), amount, currency, source, date, description };
+  await persistDataChange(() => saveIncome(record), () => {
+    const index = state.incomes.findIndex((item) => item.id === record.id);
+    if (index >= 0) state.incomes[index] = record;
+    else state.incomes.push(record);
+    els.incomeForm.reset();
+    document.getElementById("incomeId").value = "";
+  });
 }
 
-function handleExpenseSubmit(event) {
+async function handleExpenseSubmit(event) {
   event.preventDefault();
   const id = document.getElementById("expenseId").value;
   const amount = Number(document.getElementById("expenseAmount").value);
@@ -544,22 +803,17 @@ function handleExpenseSubmit(event) {
     return;
   }
 
-  if (id) {
-    const index = state.expenses.findIndex((item) => item.id === id);
-    if (index >= 0) {
-      state.expenses[index] = { ...state.expenses[index], amount, currency, category, date, description };
-    }
-  } else {
-    state.expenses.push({ id: crypto.randomUUID(), amount, currency, category, date, description });
-  }
-
-  els.expenseForm.reset();
-  document.getElementById("expenseId").value = "";
-  saveState();
-  renderAll();
+  const record = { id: id || crypto.randomUUID(), amount, currency, category, date, description };
+  await persistDataChange(() => saveExpense(record), () => {
+    const index = state.expenses.findIndex((item) => item.id === record.id);
+    if (index >= 0) state.expenses[index] = record;
+    else state.expenses.push(record);
+    els.expenseForm.reset();
+    document.getElementById("expenseId").value = "";
+  });
 }
 
-function handleBudgetSubmit(event) {
+async function handleBudgetSubmit(event) {
   event.preventDefault();
   const id = document.getElementById("budgetId").value;
   const category = document.getElementById("budgetCategory").value;
@@ -572,22 +826,17 @@ function handleBudgetSubmit(event) {
     return;
   }
 
-  if (id) {
-    const index = state.budgets.findIndex((item) => item.id === id);
-    if (index >= 0) {
-      state.budgets[index] = { ...state.budgets[index], category, amount, currency, month };
-    }
-  } else {
-    state.budgets.push({ id: crypto.randomUUID(), category, amount, currency, month });
-  }
-
-  els.budgetForm.reset();
-  document.getElementById("budgetId").value = "";
-  saveState();
-  renderAll();
+  const record = { id: id || crypto.randomUUID(), category, amount, currency, month };
+  await persistDataChange(() => saveBudget(record), () => {
+    const index = state.budgets.findIndex((item) => item.id === record.id);
+    if (index >= 0) state.budgets[index] = record;
+    else state.budgets.push(record);
+    els.budgetForm.reset();
+    document.getElementById("budgetId").value = "";
+  });
 }
 
-function handleSavingsSubmit(event) {
+async function handleSavingsSubmit(event) {
   event.preventDefault();
   const id = document.getElementById("savingsGoalId").value;
   const name = document.getElementById("goalName").value.trim();
@@ -600,22 +849,18 @@ function handleSavingsSubmit(event) {
     return;
   }
 
-  if (id) {
-    const index = state.savingsGoals.findIndex((item) => item.id === id);
-    if (index >= 0) {
-      state.savingsGoals[index] = { ...state.savingsGoals[index], name, targetAmount, currency, targetDate };
-    }
-  } else {
-    state.savingsGoals.push({ id: crypto.randomUUID(), name, targetAmount, savedAmount: 0, currency, targetDate });
-  }
-
-  els.savingsForm.reset();
-  document.getElementById("savingsGoalId").value = "";
-  saveState();
-  renderAll();
+  const existing = state.savingsGoals.find((item) => item.id === id);
+  const record = { id: id || crypto.randomUUID(), name, targetAmount, savedAmount: existing?.savedAmount || 0, currency, targetDate };
+  await persistDataChange(() => saveSavingsGoal(record), () => {
+    const index = state.savingsGoals.findIndex((item) => item.id === record.id);
+    if (index >= 0) state.savingsGoals[index] = record;
+    else state.savingsGoals.push(record);
+    els.savingsForm.reset();
+    document.getElementById("savingsGoalId").value = "";
+  });
 }
 
-function handleSafeToSpendSubmit(event) {
+async function handleSafeToSpendSubmit(event) {
   event.preventDefault();
   const nextIncomeDate = document.getElementById("safeIncomeDate").value;
   const nextIncomeAmount = Number(document.getElementById("safeIncomeAmount").value || 0);
@@ -624,7 +869,7 @@ function handleSafeToSpendSubmit(event) {
   const essentialExpenses = Number(document.getElementById("safeUpcomingExpenses").value || 0);
   const displayCurrency = document.getElementById("safeDisplayCurrency").value;
 
-  state.safeToSpend = {
+  const safeToSpend = {
     nextIncomeDate,
     nextIncomeAmount,
     nextIncomeCurrency,
@@ -633,11 +878,110 @@ function handleSafeToSpendSubmit(event) {
     displayCurrency,
   };
 
-  saveState();
-  renderSafeToSpend();
+  await persistUserSettings(() => {
+    state.safeToSpend = safeToSpend;
+  });
 }
 
 function attachEventHandlers() {
+  els.authForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setAuthStatus("");
+    const email = els.authEmail.value.trim();
+    const password = els.authPassword.value;
+    els.authSubmit.disabled = true;
+    try {
+      if (!supabase) {
+        setAuthStatus(t(supabaseConfigurationError === "missing" ? "authConfigMissing" : "authConfigInvalid"), true);
+        return;
+      }
+
+      if (currentAuthMode === "signup") {
+        if (password !== els.authPasswordConfirm.value) {
+          setAuthStatus(t("authPasswordMismatch"), true);
+          return;
+        }
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        if (!data.session) {
+          currentAuthMode = "login";
+          renderAuth();
+          setAuthStatus(t("authCheckEmail"));
+        }
+      } else if (currentAuthMode === "login") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else if (currentAuthMode === "reset") {
+        const redirectTo = `${window.location.origin}${window.location.pathname}`;
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+        if (error) throw error;
+        setAuthStatus(t("authResetSent"));
+      } else if (currentAuthMode === "update-password") {
+        if (password !== els.authPasswordConfirm.value) {
+          setAuthStatus(t("authPasswordMismatch"), true);
+          return;
+        }
+        const { error } = await supabase.auth.updateUser({ password });
+        if (error) throw error;
+        currentAuthMode = "login";
+        renderAuth();
+        setAuthStatus(t("authPasswordUpdated"));
+      }
+    } catch (error) {
+      console.error("Authentication request failed.", error);
+      setAuthStatus(authErrorMessage(error), true);
+    } finally {
+      els.authSubmit.disabled = false;
+    }
+  });
+
+  els.authModeToggle.addEventListener("click", () => {
+    currentAuthMode = currentAuthMode === "signup" ? "login" : "signup";
+    setAuthStatus("");
+    renderAuth();
+  });
+  els.authResetLink.addEventListener("click", () => {
+    currentAuthMode = "reset";
+    setAuthStatus("");
+    renderAuth();
+  });
+  els.authLanguageSelect.addEventListener("change", () => {
+    state.language = els.authLanguageSelect.value;
+    saveState();
+    applyTranslations();
+    renderAuth();
+  });
+  els.signOutBtn.addEventListener("click", async () => {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Could not sign out.", error);
+      setAppStatus(t("authGenericError"), "error");
+    }
+  });
+  els.migrateLocalDataBtn.addEventListener("click", async () => {
+    if (!activeUser || !window.confirm(t("migrationConfirm"))) return;
+    try {
+      const backup = loadLocalMigrationBackup();
+      if (!localStateHasRecords(backup)) {
+        setAppStatus(t("migrationNoData"), "error");
+        return;
+      }
+      setAppStatus(t("cloudSaving"), "loading");
+      const counts = await migrateLocalData(backup);
+      markLocalDataMigrated(activeUser.id);
+      await loadAuthenticatedData(activeUser, authTransition);
+      const count = counts.incomes + counts.expenses + counts.budgets + counts.savingsGoals + counts.contributions;
+      setAppStatus(t("migrationSuccess").replace("{count}", String(count)), "success");
+      if (counts.skippedBudgets) {
+        setAppStatus(`${t("migrationSuccess").replace("{count}", String(count))} ${t("migrationSkipped").replace("{count}", String(counts.skippedBudgets))}`, "success");
+      }
+    } catch (error) {
+      console.error("Local data migration failed.", error);
+      setAppStatus(t("migrationError"), "error");
+    }
+  });
+
   els.navItems.forEach((button) => {
     button.addEventListener("click", () => openView(button.dataset.target));
   });
@@ -675,9 +1019,10 @@ function attachEventHandlers() {
   els.safeToSpendForm.addEventListener("submit", handleSafeToSpendSubmit);
 
   els.languageSelect.addEventListener("change", () => {
-    state.language = els.languageSelect.value;
-    saveState();
-    renderAll();
+    void persistUserSettings(() => {
+      state.language = els.languageSelect.value;
+    });
+    renderAuth();
   });
 
   els.themeSelect.addEventListener("change", () => {
@@ -693,9 +1038,9 @@ function attachEventHandlers() {
   });
 
   els.exchangeRateInput.addEventListener("change", () => {
-    state.exchangeRate = Number(els.exchangeRateInput.value) || 1;
-    saveState();
-    renderAll();
+    void persistUserSettings(() => {
+      state.exchangeRate = Number(els.exchangeRateInput.value) || 1;
+    });
   });
 
   els.profileName.addEventListener("input", () => {
@@ -736,9 +1081,9 @@ function attachEventHandlers() {
     const deleteIncomeButton = event.target.closest("[data-delete-income]");
     if (deleteIncomeButton) {
       const id = deleteIncomeButton.dataset.deleteIncome;
-      state.incomes = state.incomes.filter((entry) => entry.id !== id);
-      saveState();
-      renderAll();
+      void persistDataChange(() => deleteIncome(id), () => {
+        state.incomes = state.incomes.filter((entry) => entry.id !== id);
+      });
       return;
     }
 
@@ -760,9 +1105,9 @@ function attachEventHandlers() {
     const deleteExpenseButton = event.target.closest("[data-delete-expense]");
     if (deleteExpenseButton) {
       const id = deleteExpenseButton.dataset.deleteExpense;
-      state.expenses = state.expenses.filter((entry) => entry.id !== id);
-      saveState();
-      renderAll();
+      void persistDataChange(() => deleteExpense(id), () => {
+        state.expenses = state.expenses.filter((entry) => entry.id !== id);
+      });
       return;
     }
 
@@ -783,9 +1128,9 @@ function attachEventHandlers() {
     const deleteBudgetButton = event.target.closest("[data-delete-budget]");
     if (deleteBudgetButton) {
       const id = deleteBudgetButton.dataset.deleteBudget;
-      state.budgets = state.budgets.filter((entry) => entry.id !== id);
-      saveState();
-      renderAll();
+      void persistDataChange(() => deleteBudget(id), () => {
+        state.budgets = state.budgets.filter((entry) => entry.id !== id);
+      });
       return;
     }
 
@@ -806,9 +1151,10 @@ function attachEventHandlers() {
     const deleteGoalButton = event.target.closest("[data-delete-goal]");
     if (deleteGoalButton) {
       const id = deleteGoalButton.dataset.deleteGoal;
-      state.savingsGoals = state.savingsGoals.filter((entry) => entry.id !== id);
-      saveState();
-      renderAll();
+      void persistDataChange(() => deleteSavingsGoal(id), () => {
+        state.savingsGoals = state.savingsGoals.filter((entry) => entry.id !== id);
+        state.savingsContributions = state.savingsContributions.filter((entry) => entry.goalId !== id);
+      });
       return;
     }
 
@@ -816,11 +1162,18 @@ function attachEventHandlers() {
     if (addContributionButton) {
       const goal = state.savingsGoals.find((entry) => entry.id === addContributionButton.dataset.addContribution);
       if (goal) {
-        const contribution = Number(prompt("Contribution amount", "0"));
+        const contribution = Number(prompt(t("contributionAmount"), "0"));
         if (Number.isFinite(contribution) && contribution > 0) {
-          goal.savedAmount = roundMoney(goal.savedAmount + contribution);
-          saveState();
-          renderAll();
+          const record = {
+            id: crypto.randomUUID(),
+            goalId: goal.id,
+            amount: roundMoney(contribution),
+            date: new Date().toISOString().slice(0, 10),
+          };
+          void persistDataChange(() => addSavingsContribution(record), () => {
+            state.savingsContributions.push(record);
+            goal.savedAmount = roundMoney(goal.savedAmount + record.amount);
+          });
         }
       }
       return;
@@ -849,12 +1202,39 @@ function attachEventHandlers() {
     }
   });
 
-  els.loadDemoDataBtn.addEventListener("click", () => {
+  els.loadDemoDataBtn.addEventListener("click", async () => {
+    if (state.incomes.length || state.expenses.length || state.budgets.length || state.savingsGoals.length) {
+      setAppStatus(t("demoOnlyEmpty"), "error");
+      return;
+    }
+    if (!window.confirm(t("demoAccountConfirm"))) return;
     const demoState = loadDemoData();
-    Object.assign(state, demoState);
-    saveState();
-    renderAll();
-    alert(t("demoDataLoaded"));
+    demoState.incomes.forEach((row) => {
+      row.description = `[DEMO] ${row.description}`;
+    });
+    demoState.expenses.forEach((row) => {
+      row.description = `[DEMO] ${row.description}`;
+    });
+    demoState.budgets.forEach((row) => {
+      row.category = `${row.category} (DEMO)`;
+    });
+    demoState.expenses.forEach((row) => {
+      if (row.category === "Food" || row.category === "Housing") row.category = `${row.category} (DEMO)`;
+    });
+    demoState.savingsGoals.forEach((row) => {
+      row.name = `[DEMO] ${row.name}`;
+    });
+    try {
+      await migrateLocalData(demoState);
+      await loadAuthenticatedData(activeUser, authTransition);
+      state.isDemo = true;
+      saveState();
+      renderAll();
+      setAppStatus(t("demoDataLoaded"), "success");
+    } catch (error) {
+      console.error("Could not save demo records to the account.", error);
+      setAppStatus(t("cloudSaveError"), "error");
+    }
   });
 
   els.exportDataBtn.addEventListener("click", () => {
@@ -867,9 +1247,8 @@ function attachEventHandlers() {
     if (!file) return;
     try {
       const imported = await importData(file);
-      Object.assign(state, imported);
-      saveState();
-      renderAll();
+      await migrateLocalData(imported);
+      await loadAuthenticatedData(activeUser, authTransition);
       alert(t("importSuccess"));
     } catch (error) {
       alert(t("importError"));
@@ -877,21 +1256,68 @@ function attachEventHandlers() {
     event.target.value = "";
   });
 
-  els.resetDataBtn.addEventListener("click", () => {
-    if (window.confirm(t("resetConfirm"))) {
+  els.resetDataBtn.addEventListener("click", async () => {
+    if (window.confirm(t("resetCloudConfirm"))) {
+      try {
+        await clearUserData();
+      } catch (error) {
+        console.error("Could not reset account data.", error);
+        try {
+          const remote = await loadUserData();
+          state.incomes = remote.incomes;
+          state.expenses = remote.expenses;
+          state.budgets = remote.budgets;
+          state.savingsGoals = remote.savingsGoals;
+          state.savingsContributions = remote.savingsContributions;
+          saveState();
+          renderAll();
+        } catch (refreshError) {
+          console.error("Could not refresh account data after a failed reset.", refreshError);
+        }
+        setAppStatus(t("resetCloudError"), "error");
+        return;
+      }
       const fresh = resetData();
       Object.assign(state, fresh);
       saveState();
       renderAll();
+      setAppStatus(t("cloudReady"), "success");
     }
   });
 }
 
-function init() {
+async function init() {
   document.body.classList.toggle("dark", state.theme === "dark");
-  openView("dashboard-section");
+  applyTranslations();
+  renderAuth();
   attachEventHandlers();
-  renderAll();
+  if (!supabase) {
+    setAuthStatus(t(supabaseConfigurationError === "missing" ? "authConfigMissing" : "authConfigInvalid"), true);
+    return;
+  }
+
+  let initialized = false;
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === "PASSWORD_RECOVERY") {
+      currentAuthMode = "update-password";
+      activeUser = session?.user || null;
+      els.appShell.hidden = true;
+      els.authGate.hidden = false;
+      renderAuth();
+      return;
+    }
+    if (event === "INITIAL_SESSION" && !initialized) return;
+    queueMicrotask(() => applyAuthSession(session));
+  });
+
+  const { data, error } = await supabase.auth.getSession();
+  initialized = true;
+  if (error) {
+    console.error("Could not restore the Supabase session.", error);
+    setAuthStatus(t("authGenericError"), true);
+    return;
+  }
+  await applyAuthSession(data.session);
 }
 
-init();
+void init();
